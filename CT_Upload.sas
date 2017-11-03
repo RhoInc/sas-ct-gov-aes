@@ -1,7 +1,7 @@
 /*----------------------------------------------------------------------------------*
 
    *******************************************************
-   *** Copyright 2016, Rho, Inc.  All rights reserved. ***
+   *** Copyright 2017, Rho, Inc.  All rights reserved. ***
    *******************************************************
 
    MACRO:      CT_Upload
@@ -20,18 +20,18 @@
                RANDDS         => <Dataset>         name of dataset which contains randomization variable (defaults to &SUBJLVLDS)
                RANDFLDR       => <Folder Path>     complete path to where resides (defaults to &SUBJFLDR)
                RAND           => <Variable name>   name of randomization flag variable in &SUBJLVLDS (defaults to RAND)
-                                                   &RAND should be a character variable that takes on values such as 'Yes' or 'N' (any case works)
+                                                   &RAND should be a character variable that takes on positive values such as 'Yes', 'Y', '1', 'randomized' (any case works).
                                                    if your study does not have randomized subjects, set this to NO (any case works)
                TRT            => <Variable name>   name of treatment group variable in &SUBJLVLDS
                SUBJID         => <Variable name>   name of ID variable in &SUBJLVLDS (defaults to USUBJID)
-               AESUBJID       => <Variable name>   name of ID variable in &ADAEDS (defaults to &SUBJID)
-               RANDSUBJID     => <Variable name>   name of ID variable in &RANDDS (defaults to &SUBJID)
+               SUBJIDAE       => <Variable name>   name of ID variable in &ADAEDS (defaults to &SUBJID)
+               SUBJIDRAND     => <Variable name>   name of ID variable in &RANDDS (defaults to &SUBJID)
                SERIOUS        => <Variable name>   name of SAE flag variable in &ADAEDS (defaults to AESER)
                                                    &SERIOUS should be a character variable that takes on values such as 'Yes' or 'N' (any case works)
                PT             => <Variable name>   name of preferred term variable in &ADAEDS (defaults to AEPT)
                SOC            => <Variable name>   name of system organ class variable in &ADAEDS (defaults to AESOC)
-               FREQTHRESH     => <Number>          frequency threshold for non SAEs (defaults to .05)??????
-               SOURCEVOCAB    => <Number>          MedDRA version 
+               FREQTHRESH     => <Number>          frequency threshold for non SAEs (defaults to .05)
+               SOURCEVOCAB    => <Number>          Source vocabulary 
                OUTPATH        => <Output Path>     complete path to the desired output folder (REQUIRED)
                
    DETAILS:    Searches through &SUBJLVLDS, identifying the treatment group to which each participant belongs.
@@ -51,6 +51,7 @@
    26MAY2016   Andrew Moseby     Adapted original from Maya Barton    
    06Sep2016   MB Herring        Remove DMReset code, which does not work on the grid.
    27SEP2016   Andrew Moseby     Now, subjects whose only non-SAEs were among those omitted by FREQTHRESH do not contribute to totals.
+   03NOV2017   Andrew Moseby     Rename SUBJID variables to have SUBJID at the beginning of the name
 *-----------------------------------------------------------------------------------*/
 
 %macro CT_Upload
@@ -66,20 +67,20 @@
                                  Complete path to the folder where &RANDDS resides. Default is &SUBJFLDR. 
                                  If &RANDFLDR = work, the macro looks in the work directory for &RANDDS. */
    ,RAND = rand               /* Name of randomization variable. Default is RAND.
-                                 &RAND should be a character variable that takes on positive values such as Yes, Y, 1, randomized (any case works).
-                                 If your AEs are to be subset on Safety instead of Randomization, you may set &RAND to your safety flag variable (SAFETY or SAFFL, for example).
+                                 &RAND should be a character variable that takes on positive values such as 'Yes', 'Y', '1', 'randomized' (any case works).
+                                 If your AEs are to be subset to Safety population instead of Randomized, you may set &RAND to your safety flag variable (SAFETY or SAFFL, for example).
                                  If your study does not have randomized subjects, set this to NO (any case works). */
-   ,TRT = trt01p              /* Name of treatment group variable in &SUBJLVLDS. Default is TRT01P. 
+   ,TRT = trt                 /* Name of treatment group variable in &SUBJLVLDS. Default is TRT. 
                                  If there is no treatment group variable (i.e., the study has only one treatment arm), set this to NO (any case works). */
    ,SUBJID = usubjid          /* Name of ID variable in &SUBJLVLDS. Default is USUBJID. */
-   ,AESUBJID = &SUBJID        /* Name of ID variable in &ADAEDS. Default is &SUBJID. */
-   ,RANDSUBJID = &SUBJID      /* Name of ID variable in &RANDDS. Default is &SUBJID. */
+   ,SUBJIDAE = &SUBJID        /* Name of ID variable in &ADAEDS. Default is &SUBJID. */
+   ,SUBJIDRAND = &SUBJID      /* Name of ID variable in &RANDDS. Default is &SUBJID. */
    ,SERIOUS = aeser           /* Name of SAE flag variable in &ADAEDS. Default is AESER.
-                                 &SERIOUS should be a character variable that takes on values such as Yes/No, Y/N, 1/0 (any case works). */
+                                 &SERIOUS should be the name of a character variable that takes on values such as 'Yes'/'No', 'Y'/'N', '1'/'0' (any case works). */
    ,PT = aept                 /* Name of preferred term variable in &ADAEDS. Default is AEPT. */
    ,SOC = aesoc               /* Name of system organ class variable in &ADAEDS. Default is AESOC. */
-   ,FREQTHRESH = .05          /* Frequency threshold for non SAEs - non SAEs occurring among a smaller proportion of subjects than &FreqThresh in every treatment group are not included in the output. Default is 5% (.05). */
-   ,SOURCEVOCAB =             /* Source vocabulary, usually found in clinical dataset AEXPCODE. (Sample value: MedDRA 13.1) */
+   ,FREQTHRESH = .05          /* Frequency threshold for non SAEs - non SAEs occurring in a smaller proportion of subjects than &FreqThresh in every treatment group are not included in the output. Default is 5% (.05). */
+   ,SOURCEVOCAB =             /* Source vocabulary, usually found in a coded AE dataset. (Sample value: MedDRA 13.1) */
    ,OUTPATH =                 /* Complete path to desired output folder */
    );
 
@@ -224,14 +225,14 @@ quit;
    %end; 
 
 %if "&RANDDS" ^= "&SUBJLVLDS" or "&RANDFLDR" ^= "&SUBJFLDR" %then %do;
-   proc sort data = &RANDDIR..&RANDDS out = _rand; by &RANDSUBJID; run;
+   proc sort data = &RANDDIR..&RANDDS out = _rand; by &SUBJIDRAND; run;
 %end;
 
 data _subjInfo;
    merge 
       _subj
       %if %sysfunc(exist(_rand)) %then %do; %*bring in randomization dataset if it exists*;
-      _rand (rename = (&RANDSUBJID = &SUBJID) keep = &RANDSUBJID &RAND)
+      _rand (rename = (&SUBJIDRAND = &SUBJID) keep = &SUBJIDRAND &RAND)
       %end;
       ;
    by &SUBJID;
@@ -313,14 +314,14 @@ quit;
    %do; %*if there are multiple treatment arms then*;
 
       proc sort data = _subjInfo; by &SUBJID; run;
-      proc sort data = &ADAEDIR..&ADAEDS out = _adae0; by &AESUBJID; run;
+      proc sort data = &ADAEDIR..&ADAEDS out = _adae0; by &SUBJIDAE; run;
 
       data _adae1;
          length ser1 $5;
          merge 
-            _adae0(keep = &AESUBJID &SERIOUS &PT &SOC rename = (&SERIOUS=ser1) in = ae)
-            _subjInfo(keep = &SUBJID &trt rename = (&SUBJID=&AESUBJID));
-         by &AESUBJID;
+            _adae0(keep = &SUBJIDAE &SERIOUS &PT &SOC rename = (&SERIOUS=ser1) in = ae)
+            _subjInfo(keep = &SUBJID &trt rename = (&SUBJID=&SUBJIDAE));
+         by &SUBJIDAE;
          if ae;
          %do i = 1 %to &n_trt;
             if &trt = "&&TrtValue&i" then trtc = "&&ltr&i"; %*trtc eventually becomes a transpose ID variable*;
@@ -332,7 +333,7 @@ quit;
    %do; %*if there is only one treatment arm then;
       data _adae1;
          length ser1 $5;
-         set adaefldr.&ADAEDS(keep = &AESUBJID &SERIOUS &PT &SOC rename = (&SERIOUS=ser1));
+         set adaefldr.&ADAEDS(keep = &SUBJIDAE &SERIOUS &PT &SOC rename = (&SERIOUS=ser1));
          trtc = "&ltr1";
       run;
    %end;
@@ -342,12 +343,12 @@ quit;
 proc sql noprint;
    %*total*;
    create table _stat1 as
-      select count(&AESUBJID) as event, count(distinct &AESUBJID) as subject, trtc, ser1
+      select count(&SUBJIDAE) as event, count(distinct &SUBJIDAE) as subject, trtc, ser1
       from _adae1
       group by ser1, trtc;
    %*by system organ class and term;
    create table _stat2 as
-      select count(&AESUBJID) as event, count(distinct &AESUBJID) as subject, trtc, &soc, &pt, ser1
+      select count(&SUBJIDAE) as event, count(distinct &SUBJIDAE) as subject, trtc, &soc, &pt, ser1
       from _adae1
       group by ser1, &soc, &pt, trtc;
 quit;
