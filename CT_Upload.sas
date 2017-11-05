@@ -89,7 +89,7 @@
 %*------------ SETUP AND INITIALIZATION ------------;
 %*--------------------------------------------------;
 
-options symbolgen mlogic mprint;
+%*options symbolgen mlogic mprint;
 
 %*Terminate processing if required macro variables are not defined correctly;
 %*However, circumvent this check if the user indicates they want to use a dataset
