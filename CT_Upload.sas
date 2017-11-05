@@ -8,9 +8,7 @@
    
    PURPOSE:    Generate ADAE data to upload to CT.gov 
 
-   DESCRIPTION: Generate CT.gov AE summary deliverable. 
-                (For dataset specs, see S:\RhoFED\NIAID\DAIT\General\DataSharing\ClinicalTrials.gov\Templates\Adverse Events\Adverse Event Table Specs.docx)
-                Requires a coded AE dataset to run.
+   DESCRIPTION: Generate CT.gov AE summary deliverable.
                 Macro accounts for (non-)randomized studies, # of treatment groups, names of ID and AE variables.
                
    ARGUMENTS:  SUBJLVLDS      => <Dataset>         name of subject-level dataset in the &SUBJLVLDS directory
