@@ -8,7 +8,9 @@
    
    PURPOSE:    Generate ADAE data to upload to CT.gov 
 
-   DESCRIPTION: Generate CT.gov AE summary deliverable.
+   DESCRIPTION: Generate CT.gov AE summary deliverable. 
+                (For dataset specs, see S:\RhoFED\NIAID\DAIT\General\DataSharing\ClinicalTrials.gov\Templates\Adverse Events\Adverse Event Table Specs.docx)
+                Requires a coded AE dataset to run.
                 Macro accounts for (non-)randomized studies, # of treatment groups, names of ID and AE variables.
                
    ARGUMENTS:  SUBJLVLDS      => <Dataset>         name of subject-level dataset in the &SUBJLVLDS directory
@@ -26,6 +28,7 @@
                SUBJIDRAND     => <Variable name>   name of ID variable in &RANDDS (defaults to &SUBJID)
                SERIOUS        => <Variable name>   name of SAE flag variable in &ADAEDS (defaults to AESER)
                                                    &SERIOUS should be a character variable that takes on values such as 'Yes' or 'N' (any case works)
+               DEATH          => <Variable name>   name of death flag variable in &ADAEDS (defaults to AEDTH)
                PT             => <Variable name>   name of preferred term variable in &ADAEDS (defaults to AEPT)
                SOC            => <Variable name>   name of system organ class variable in &ADAEDS (defaults to AESOC)
                FREQTHRESH     => <Number>          frequency threshold for non SAEs (defaults to .05)
@@ -50,6 +53,8 @@
    06Sep2016   MB Herring        Remove DMReset code, which does not work on the grid.
    27SEP2016   Andrew Moseby     Now, subjects whose only non-SAEs were among those omitted by FREQTHRESH do not contribute to totals.
    03NOV2017   Andrew Moseby     Rename SUBJID variables to have SUBJID at the beginning of the name
+   30MAR2018   Andrew Moseby     Fix bug in which 'Total AE' rows would sometimes be 0. 
+                                 NOTE: Please make sure &serious has consistent case - use 'Yes' and 'No' instead of 'yes' and 'NO', for example.
 *-----------------------------------------------------------------------------------*/
 
 %macro CT_Upload
@@ -75,6 +80,8 @@
    ,SUBJIDRAND = &SUBJID      /* Name of ID variable in &RANDDS. Default is &SUBJID. */
    ,SERIOUS = aeser           /* Name of SAE flag variable in &ADAEDS. Default is AESER.
                                  &SERIOUS should be the name of a character variable that takes on values such as 'Yes'/'No', 'Y'/'N', '1'/'0' (any case works). */
+   ,DEATH = aedth             /* Name of death flag variable in &ADAEDS. Default is AEDTH. 
+                                 &DEATH should be the name of a character variable that takes on positive values such as 'Yes', 'Y', '1' (any case works). */
    ,PT = aept                 /* Name of preferred term variable in &ADAEDS. Default is AEPT. */
    ,SOC = aesoc               /* Name of system organ class variable in &ADAEDS. Default is AESOC. */
    ,FREQTHRESH = .05          /* Frequency threshold for non SAEs - non SAEs occurring in a smaller proportion of subjects than &FreqThresh in every treatment group are not included in the output. Default is 5% (.05). */
@@ -87,7 +94,7 @@
 %*------------ SETUP AND INITIALIZATION ------------;
 %*--------------------------------------------------;
 
-%*options symbolgen mlogic mprint;
+options symbolgen mlogic mprint;
 
 %*Terminate processing if required macro variables are not defined correctly;
 %*However, circumvent this check if the user indicates they want to use a dataset
@@ -383,12 +390,12 @@ data test;
       _adae1(in = ae)
       ;
    by ser1 &soc &pt;
-   if keep and ser1 = 'No';
+   if keep and upcase(ser1) in ('NO' 'N' '0');
 run;
 
 proc sql;
    %do i = 1 %to &n_trt;
-      select count(distinct usubjid) into: non_s_tot&&ltr&i from test where trtc = "&&ltr&i";
+      select count(distinct &SUBJIDAE) into: non_s_tot&&ltr&i from test where trtc = "&&ltr&i";
       %let non_s_tot&&ltr&i = &&&&non_s_tot&&ltr&i;
    %end;
 run;
@@ -405,6 +412,11 @@ data _outtext0;
      end ;
 run;
 
+%*Determine data formatting conventions for &serious so that new rows for totals can be made;
+proc sql;
+   select distinct &serious into: _servals separated by ' ' from _adae0 where not missing(&serious);
+quit;
+
 %*Creating place holders for zeros;
 data _blanks;
    set _check end = eof;
@@ -414,18 +426,97 @@ data _blanks;
    %end;
    if eof then
       do;
-         %do i = 1 %to &n_trt;
-            ser1 = 'No';
-            &soc = 'Total AE';
-            &pt  = 'Total AE';
-            trtc = "&&ltr&i";
-            output;
-            ser1 = 'Yes';
-            &soc = 'Total AE';
-            &pt  = 'Total AE';
-            trtc = "&&ltr&i";
-            output;
-         %end;
+         %if &_servals = %str(No Yes) or &_servals = %str(Yes No) %then 
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = 'No';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = 'Yes';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+         %if &_servals = %str(no yes) or &_servals = %str(yes no) %then
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = 'no';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = 'yes';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+         %if &_servals = %str(NO YES) or &_servals = %str(YES NO) %then
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = 'NO';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = 'YES';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+         %if &_servals = %str(n y) or &_servals = %str(y n) %then
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = 'n';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = 'y';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+         %if &_servals = %str(N Y) or &_servals = %str(Y N) %then
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = 'N';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = 'Y';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+         %if &_servals = %str(0 1) or &_servals = %str(1 0) %then
+            %do;
+               %do i = 1 %to &n_trt;
+                  ser1 = '0';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+                  ser1 = '1';
+                  &soc = 'Total AE';
+                  &pt  = 'Total AE';
+                  trtc = "&&ltr&i";
+                  output;
+               %end;
+            %end;
+
       end ;
 run;
 
@@ -436,9 +527,10 @@ proc sort data = _outtext0; by &soc &pt ser1 trtc; run;
 %*Formatting - 1 count per row;
 data _outtext (rename = (&soc = OrganSystemName &pt = Term));
    length SAE $5 AssessmentType SourceVocabulary $25 &soc &pt $200 ReportingGroupID $50 cat_var $25 Counts $15;
-   merge _outtext0 _blanks (in = keep);
+   merge _outtext0(in = data) _blanks (in = keep);
    by &soc &pt ser1 trtc;
    if keep;
+            if data then comeon = 1;
 
       if event = . then event = 0;
       if subject = . then subject = 0;
@@ -498,10 +590,39 @@ data _outtext (rename = (&soc = OrganSystemName &pt = Term));
             sort = 3;
             output;
          end ;
-   keep sae AssessmentType sourcevocabulary &soc &pt reportinggroupid cat_var counts sort;
+   keep sae AssessmentType sourcevocabulary &soc &pt reportinggroupid cat_var counts sort comeon;
 run;
 
 proc sort data = _outtext; by sae OrganSystemName Term ReportingGroupID sort; run;
+
+%*Counting up deaths;
+proc sql;
+   %do i = 1 %to &n_trt;
+      select count(distinct &SUBJIDAE) into: death&i trimmed from &ADAEDIR..&ADAEDS where upcase(&DEATH) in ('YES' '1' 'Y');
+   %end;
+quit;
+
+data _deaths;
+   length counts $10;
+   %do i = 1 %to &n_trt;
+      sae = 'True';
+      assessmenttype = 'Systematic Assessment';
+      sourcevocabulary = "&SOURCEVOCAB";
+      organsystemname = 'All-Cause Mortality';
+      term = 'All-Cause Mortality';
+      reportinggroupid = "ReportedEvents-InterventionGroup.&i";
+      cat_var = 'numSubjectsEvents';
+      counts = strip("&&death&i");
+      output;
+      cat_var = 'partAtRiskEvents';
+      counts = strip("&&&&tot&&ltr&i");
+      output;
+   %end;
+run;
+
+data _outtext;
+   set _outtext _deaths;
+run;
 
 %*Outputting copy of dataset;
 data out.aefreq; set _outtext; drop sort; run;
