@@ -530,7 +530,6 @@ data _outtext (rename = (&soc = OrganSystemName &pt = Term));
    merge _outtext0(in = data) _blanks (in = keep);
    by &soc &pt ser1 trtc;
    if keep;
-            if data then comeon = 1;
 
       if event = . then event = 0;
       if subject = . then subject = 0;
@@ -590,7 +589,7 @@ data _outtext (rename = (&soc = OrganSystemName &pt = Term));
             sort = 3;
             output;
          end ;
-   keep sae AssessmentType sourcevocabulary &soc &pt reportinggroupid cat_var counts sort comeon;
+   keep sae AssessmentType sourcevocabulary &soc &pt reportinggroupid cat_var counts sort;
 run;
 
 proc sort data = _outtext; by sae OrganSystemName Term ReportingGroupID sort; run;
