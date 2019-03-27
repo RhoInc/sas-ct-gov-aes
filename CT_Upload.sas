@@ -55,6 +55,8 @@
    03NOV2017   Andrew Moseby     Rename SUBJID variables to have SUBJID at the beginning of the name
    30MAR2018   Andrew Moseby     Fix bug in which 'Total AE' rows would sometimes be 0. 
                                  NOTE: Please make sure &serious has consistent case - use 'Yes' and 'No' instead of 'yes' and 'NO', for example.
+   11SEP2018   Andrew Moseby     Fix bug in which the program looks for an undefined library when TRT = No and ADAEFLDR = Work
+   27MAR2019   Andrew Moseby     Fix bug in which deaths are not split by treatment group
 *-----------------------------------------------------------------------------------*/
 
 %macro CT_Upload
@@ -315,11 +317,11 @@ quit;
 %*4. Format and output the dataset;
 %*-----------------------------------------------------------------;
 
+proc sort data = _subjInfo; by &SUBJID; run;
+proc sort data = &ADAEDIR..&ADAEDS out = _adae0; by &SUBJIDAE; run;
+
 %if %sysfunc(upcase(&Trt)) ^= NO %then 
    %do; %*if there are multiple treatment arms then*;
-
-      proc sort data = _subjInfo; by &SUBJID; run;
-      proc sort data = &ADAEDIR..&ADAEDS out = _adae0; by &SUBJIDAE; run;
 
       data _adae1;
          length ser1 $5;
@@ -338,7 +340,7 @@ quit;
    %do; %*if there is only one treatment arm then;
       data _adae1;
          length ser1 $5;
-         set adaefldr.&ADAEDS(keep = &SUBJIDAE &SERIOUS &PT &SOC rename = (&SERIOUS=ser1));
+         set _adae0(keep = &SUBJIDAE &SERIOUS &PT &SOC rename = (&SERIOUS=ser1));
          trtc = "&ltr1";
       run;
    %end;
@@ -597,7 +599,8 @@ proc sort data = _outtext; by sae OrganSystemName Term ReportingGroupID sort; ru
 %*Counting up deaths;
 proc sql;
    %do i = 1 %to &n_trt;
-      select count(distinct &SUBJIDAE) into: death&i trimmed from &ADAEDIR..&ADAEDS where upcase(&DEATH) in ('YES' '1' 'Y');
+      select count(distinct &SUBJIDAE) into: death&i trimmed from &ADAEDIR..&ADAEDS where upcase(&DEATH) in ('YES' '1' 'Y') 
+         %if %upcase(&TRT) ^= NO %then and &TRT = "&&TrtValue&i";;
    %end;
 quit;
 
